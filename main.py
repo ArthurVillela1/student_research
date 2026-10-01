@@ -138,15 +138,31 @@ def run_sample(sheet_name, variables):
         cluster_entity=True,
     )
 
+ # Display explanatory variables and control dummies.
+    displayed_vars = [
+        col for col in x_pooled_re.columns
+        if col != "constant"
+    ]
+
     main_table = pd.DataFrame({
         "Pooled OLS": make_column(
-            pooled, variables, variables, countries
+            pooled,
+            included_vars=displayed_vars,
+            all_vars=displayed_vars,
+            countries=countries,
         ),
         "Random effects": make_column(
-            random, variables, variables, countries
+            random,
+            included_vars=displayed_vars,
+            all_vars=displayed_vars,
+            countries=countries,
         ),
         "Country fixed effects": make_column(
-            fixed, variables, variables, countries, fe=True
+            fixed,
+            included_vars=variables,
+            all_vars=displayed_vars,
+            countries=countries,
+            fe=True,
         ),
     })
 
