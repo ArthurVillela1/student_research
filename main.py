@@ -268,3 +268,120 @@ for period, variables in VARIABLES.items():
     print(f"\nPERIOD — {period}")
     run_sample(f"S{period} (I)", variables)
 
+
+# ============================================================== 
+# SECTION 3: PREDICTIVE MODELS
+# ============================================================== 
+
+def run_predictive_models():
+    variables = VARIABLES["2012-2022"]
+    df = read_sample("S2012-2022", variables)
+
+    predictors = df[
+        ["country", "year", "region", "income_group", *variables]
+    ].copy()
+    predictors["outcome_year"] = predictors["year"] + 1
+    outcomes = df[["country", "year", "tea"]].rename(
+        columns={"year": "outcome_year", "tea": "tea_next"}
+    )
+    matched = predictors.merge(
+        outcomes,
+        on=["country", "outcome_year"],
+        how="inner",
+        validate="one_to_one",
+    )
+
+    specifications = [[var] for var in variables] + [variables]
+    pooled_columns = {}
+    random_columns = {}
+    fixed_columns = {}
+
+    for number, model_variables in enumerate(specifications, start=1):
+        is_joint = len(model_variables) > 1
+        required_columns = ["tea_next", *model_variables]
+        if is_joint:
+            required_columns.extend(["region", "income_group"])
+        model_data = matched.dropna(subset=required_columns).copy()
+        model_data = model_data.drop(columns="year").rename(
+            columns={"outcome_year": "year"}
+        )
+        panel = model_data.set_index(["country", "year"]).sort_index()
+        y = panel["tea_next"].astype(float)
+        controls = pd.DataFrame(index=panel.index)
+        if is_joint:
+            controls = pd.get_dummies(
+                panel[["region", "income_group"]],
+                drop_first=True,
+                dtype=float,
+            )
+            if "region_South Asia" in controls.columns:
+                controls = controls.drop(columns="region_South Asia")
+
+        x_pooled_re = pd.concat(
+            [panel[model_variables].astype(float), controls],
+            axis=1,
+        )
+        x_pooled_re["constant"] = 1.0
+        x_fe = panel[model_variables].astype(float)
+        countries = model_data["country"].nunique()
+
+        pooled = PooledOLS(y, x_pooled_re).fit(
+            cov_type="clustered",
+            cluster_entity=True,
+        )
+        random = RandomEffects(y, x_pooled_re).fit(
+            cov_type="clustered",
+            cluster_entity=True,
+        )
+        fixed = PanelOLS(
+            y,
+            x_fe,
+            entity_effects=True,
+            time_effects=True,
+        ).fit(
+            cov_type="clustered",
+            cluster_entity=True,
+        )
+
+        model_name = (
+            f"({number}) {model_variables[0]}"
+            if len(model_variables) == 1
+            else f"({number}) Joint"
+        )
+        pooled_variables = [*model_variables, *controls.columns]
+        pooled_columns[model_name] = make_column(
+            pooled,
+            included_vars=pooled_variables,
+            all_vars=[*variables, *controls.columns],
+            countries=countries,
+        )
+        random_columns[model_name] = make_column(
+            random,
+            included_vars=pooled_variables,
+            all_vars=[*variables, *controls.columns],
+            countries=countries,
+        )
+        fixed_columns[model_name] = make_column(
+            fixed,
+            included_vars=model_variables,
+            all_vars=variables,
+            countries=countries,
+            fe=True,
+        )
+
+    print("\nPREDICTIVE MODELS — NON-INTERPOLATED S2012-2022")
+    print("Predictors are from year t; outcome is TEA in exactly year t+1.")
+    print("Univariate models exclude region and income-group controls.")
+    print("Joint pooled OLS and random effects include region and income-group controls from year t.")
+    print("Fixed effects include country and outcome-year effects.")
+
+    print("\nPREDICTIVE POOLED OLS")
+    print(pd.DataFrame(pooled_columns).round(4).to_string())
+    print("\nPREDICTIVE RANDOM EFFECTS")
+    print(pd.DataFrame(random_columns).round(4).to_string())
+    print("\nPREDICTIVE COUNTRY AND YEAR FIXED EFFECTS")
+    print(pd.DataFrame(fixed_columns).round(4).to_string())
+
+
+run_predictive_models()
+
