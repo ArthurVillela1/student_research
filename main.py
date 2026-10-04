@@ -66,7 +66,6 @@ def prepare_model_data(df, variables, sheet_name):
         drop_first=True,
         dtype=float,
     )
-
     # In both 2012–2022 sheets, this dummy duplicates the
     # lower-middle-income dummy.
     if sheet_name.startswith("S2012-2022"):
@@ -133,12 +132,13 @@ def run_sample(sheet_name, variables):
         y,
         x_fe,
         entity_effects=True,
+        time_effects=True,
     ).fit(
         cov_type="clustered",
         cluster_entity=True,
     )
 
- # Display explanatory variables and control dummies.
+    # Display explanatory variables and control dummies.
     displayed_vars = [
         col for col in x_pooled_re.columns
         if col != "constant"
@@ -156,6 +156,7 @@ def run_sample(sheet_name, variables):
             single_y,
             single_x_fe,
             entity_effects=True,
+            time_effects=True,
         ).fit(
             cov_type="clustered",
             cluster_entity=True,
@@ -230,15 +231,15 @@ def run_sample(sheet_name, variables):
     univariate_ols_table = pd.DataFrame(univariate_ols_columns)
     univariate_re_table = pd.DataFrame(univariate_re_columns)
 
-    print(f"\nPOOLED OLS: UNIVARIATE AND JOINT — {sheet_name}")
+    print(f"\nPOOLED OLS: UNIVARIATE AND JOINT (No country or year effects) — {sheet_name}")
     print(univariate_ols_table.round(4).to_string())
 
-    print(f"\nRANDOM EFFECTS: UNIVARIATE AND JOINT — {sheet_name}")
+    print(f"\nRANDOM EFFECTS: UNIVARIATE AND JOINT (Country random effects; no year effects) — {sheet_name}")
     print(univariate_re_table.round(4).to_string())
     # print(f"\nRANDOM EFFECTS THETA — {sheet_name}")
     # print(random.theta.round(4).to_string())
 
-    print(f"\nFIXED EFFECTS: UNIVARIATE AND JOINT — {sheet_name}")
+    print(f"\nFIXED EFFECTS: UNIVARIATE AND JOINT (Country and year fixed effects) — {sheet_name}")
     print(fe_table.round(4).to_string())
 
 
