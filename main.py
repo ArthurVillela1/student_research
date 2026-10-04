@@ -126,8 +126,8 @@ def run_sample(sheet_name, variables):
         cluster_entity=True,
     )
     
-    print(f"\nTHETA — {sheet_name}")
-    print(random.theta.round(4).to_string())
+    # print(f"\nTHETA — {sheet_name}")
+    # print(random.theta.round(4).to_string())
 
     fixed = PanelOLS(
         y,
@@ -143,28 +143,6 @@ def run_sample(sheet_name, variables):
         col for col in x_pooled_re.columns
         if col != "constant"
     ]
-
-    main_table = pd.DataFrame({
-        "Pooled OLS": make_column(
-            pooled,
-            included_vars=displayed_vars,
-            all_vars=displayed_vars,
-            countries=countries,
-        ),
-        "Random effects": make_column(
-            random,
-            included_vars=displayed_vars,
-            all_vars=displayed_vars,
-            countries=countries,
-        ),
-        "Country fixed effects": make_column(
-            fixed,
-            included_vars=variables,
-            all_vars=displayed_vars,
-            countries=countries,
-            fe=True,
-        ),
-    })
 
     # Country FE: each variable alone, then the joint model.
     fe_columns = {}
@@ -201,10 +179,66 @@ def run_sample(sheet_name, variables):
 
     fe_table = pd.DataFrame(fe_columns)
 
-    print(f"\nMAIN PANEL RESULTS — {sheet_name}")
-    print(main_table.round(4).to_string())
+    univariate_ols_columns = {}
+    univariate_re_columns = {}
 
-    print(f"\nCOUNTRY FIXED EFFECTS — {sheet_name}")
+    for number, var in enumerate(variables, start=1):
+        single_data = df.dropna(subset=["tea", var]).copy()
+        single_panel = single_data.set_index(
+            ["country", "year"]
+        ).sort_index()
+        single_y = single_panel["tea"].astype(float)
+        single_x = single_panel[[var]].astype(float)
+        single_x["constant"] = 1.0
+        single_countries = single_data["country"].nunique()
+
+        single_pooled = PooledOLS(single_y, single_x).fit(
+            cov_type="clustered",
+            cluster_entity=True,
+        )
+        single_random = RandomEffects(single_y, single_x).fit(
+            cov_type="clustered",
+            cluster_entity=True,
+        )
+
+        univariate_ols_columns[f"({number}) {var}"] = make_column(
+            single_pooled,
+            included_vars=[var],
+            all_vars=displayed_vars,
+            countries=single_countries,
+        )
+        univariate_re_columns[f"({number}) {var}"] = make_column(
+            single_random,
+            included_vars=[var],
+            all_vars=displayed_vars,
+            countries=single_countries,
+        )
+
+    univariate_ols_columns[f"({len(variables) + 1}) Joint"] = make_column(
+        pooled,
+        included_vars=displayed_vars,
+        all_vars=displayed_vars,
+        countries=countries,
+    )
+    univariate_re_columns[f"({len(variables) + 1}) Joint"] = make_column(
+        random,
+        included_vars=displayed_vars,
+        all_vars=displayed_vars,
+        countries=countries,
+    )
+
+    univariate_ols_table = pd.DataFrame(univariate_ols_columns)
+    univariate_re_table = pd.DataFrame(univariate_re_columns)
+
+    print(f"\nPOOLED OLS: UNIVARIATE AND JOINT — {sheet_name}")
+    print(univariate_ols_table.round(4).to_string())
+
+    print(f"\nRANDOM EFFECTS: UNIVARIATE AND JOINT — {sheet_name}")
+    print(univariate_re_table.round(4).to_string())
+    # print(f"\nRANDOM EFFECTS THETA — {sheet_name}")
+    # print(random.theta.round(4).to_string())
+
+    print(f"\nFIXED EFFECTS: UNIVARIATE AND JOINT — {sheet_name}")
     print(fe_table.round(4).to_string())
 
 
@@ -217,6 +251,7 @@ print("RESULTS WITHOUT INTERPOLATION")
 print("=" * 75)
 
 for period, variables in VARIABLES.items():
+    print(f"\nPERIOD — {period}")
     run_sample(f"S{period}", variables)
 
 
@@ -229,5 +264,6 @@ print("RESULTS WITH INTERPOLATION")
 print("=" * 75)
 
 for period, variables in VARIABLES.items():
+    print(f"\nPERIOD — {period}")
     run_sample(f"S{period} (I)", variables)
 
